@@ -147,3 +147,58 @@ export const analyzeSituation = (heroCards, communityCards) => {
 
   return analysis;
 };
+export const generateExpertCommentary = async (context, strategy) => {
+  const { heroCards, communityCards, equity, analysis, potSize, currentBet } = context;
+  
+  if (heroCards.length < 2) return "En attente de la main de départ (Hero).";
+
+  const numPot = Number(potSize) || 0;
+  const numBet = Number(currentBet) || 0;
+  const potOdds = numBet > 0 ? (numBet / (numPot + numBet)) * 100 : 0;
+  const winEq = equity.win;
+
+  // Simulation de latence d'API (Inférence LLM)
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  let action = "CHECK";
+  let justification = "";
+
+  // Logique décisionnelle stricte
+  if (numBet === 0) {
+    if (winEq > 60 || (analysis && analysis.directives.some(d => d.includes("Value")))) {
+      action = "RAISE";
+      justification = "Vous êtes favori. Misez pour valoriser votre main et faire payer les tirages.";
+    } else if (winEq > 40) {
+      action = "CHECK";
+      justification = "Équité moyenne. Contrôlez la taille du pot.";
+    } else {
+      action = "CHECK / FOLD";
+      justification = "Main faible ou dominée. N'investissez rien de plus.";
+    }
+  } else {
+    // Face à une mise
+    if (winEq >= potOdds * 1.5) {
+      action = "RE-RAISE (3-Bet/4-Bet)";
+      justification = `Équité (${winEq.toFixed(1)}%) largement supérieure aux cotes du pot (${potOdds.toFixed(1)}%). Relancez pour maximiser la valeur et protéger votre main.`;
+    } else if (winEq >= potOdds) {
+      action = "CALL";
+      justification = `Cotes de pot favorables (${potOdds.toFixed(1)}% requises vs ${winEq.toFixed(1)}% d'équité). Suivez la mise, mais restez prudent sur les prochaines streets.`;
+    } else {
+      // Intégration de la stratégie pour dévier de la pure mathématique
+      if (strategy === "LAG (Loose Aggressive)" && analysis.draws.length > 0) {
+        action = "RAISE (Semi-Bluff)";
+        justification = `Cotes défavorables, mais la stratégie LAG exploite la Fold Equity. Relancez sur vos tirages (${analysis.draws[0]}).`;
+      } else {
+        action = "FOLD";
+        justification = `EV négative. Les cotes du pot (${potOdds.toFixed(1)}%) exigent plus d'équité que votre main actuelle (${winEq.toFixed(1)}%). Passez.`;
+      }
+    }
+  }
+
+  // Ajout du contexte de texture
+  const threatMsg = analysis && analysis.vulnerabilities.length > 0 
+    ? ` Attention: ${analysis.vulnerabilities[0]}.` 
+    : "";
+
+  return `[ACTION : ${action}]\n${justification}${threatMsg}`;
+};
